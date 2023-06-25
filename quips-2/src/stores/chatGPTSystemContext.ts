@@ -43,7 +43,8 @@ In general there are 3 types.
 }
 
 Quips:
-The below is an example format for your responses, containing a list of 3 possibilities (quips). The list of possibilities may be longer or shorter.:{
+The response must be a valid json object and should have no text before or after it. The below is an example format for your responses, containing a list of 3 possibilities (quips). The list of possibilities may be longer or shorter:
+{
 \t"quips": [
 \t\t"No thanks, I’m fine",
 \t\t"pint of Guinness please",

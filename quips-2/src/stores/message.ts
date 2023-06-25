@@ -28,9 +28,13 @@ export const useMessageStore = defineStore('ChatHistory', () => {
             }
         ]
     );
-    function addMessage(messageBody) {
-        messages.value.push(messageBody)
+    const addMessage = function (messageBody, role) {
+        messages.value.push({
+            "role": role, "content": messageBody
+        })
     }
 
-    return {messages}
+    const quips =ref(['Hi', 'Hello', "How's it going?"])
+
+    return {messages, addMessage, quips}
 })

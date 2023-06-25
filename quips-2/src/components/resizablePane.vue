@@ -2,11 +2,12 @@
 const props = defineProps({
   leftMin: Number,
   rightMin: Number,
+  initialPos: Number,
 })
 
 import {ref} from "vue";
 
-let dividerPosition = ref(75)
+let dividerPosition = ref(props.initialPos)
 
 function handleDragging(e) {
 
@@ -64,7 +65,7 @@ function endDragging() {
   display: flex;
 
   .left {
-    background-color: cyan;
+    background-color: rgba(255, 255, 255, 0.93);
     display: initial
   }
 
