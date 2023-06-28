@@ -1,10 +1,11 @@
 import OpenAIClient from "@/repositories/Clients/OpenAIClient";
+import {SystemContext} from "@/stores/chatGPTSystemContext";
 
 const resource = '/chat/completions';
 
 
 export default {
-    post(messages) {
+    generate_repsonse(messages) {
 
         const config = {
             headers: {
@@ -14,7 +15,7 @@ export default {
 
         const data = {
             "model": "gpt-3.5-turbo",
-            "messages": messages
+            "messages": messages.concat([{"role": "user", "content": 'Instruction: generate JSON suggestions'}])
         }
 
         return OpenAIClient.post(`${resource}`, data, config);

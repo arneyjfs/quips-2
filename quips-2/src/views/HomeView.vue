@@ -15,6 +15,8 @@ let messageWindow
 
 let isRecording = ref(false)
 
+// let typed_message = ''
+
 
 function intialiseRecorder(stream) {
   let recorder = new MediaRecorder(stream, options);
@@ -26,14 +28,9 @@ function intialiseRecorder(stream) {
     if (e.data.size > 0) recordedChunks.push(e.data);
     console.info('saved')
     getTranscription().then(
-        (result) => {
+        async (result) => {
           console.log(`Transciption: ${result.data.text}`)
-          let message_json = `{\n\t"type":  "utterance",\n\t "text":  "${result.data.text}"\n}`
-          messageStore.addMessage(message_json, 'user')
-          nextTick(() => {
-            messageWindow.scrollTop = messageWindow.scrollHeight;
-          })
-          getQuips()
+          await getQuips(result.data.text)
         }
     )
   });
@@ -75,8 +72,12 @@ async function getTranscription() {
   console.log('not transcribing')
 }
 
-async function getQuips() {
-  return await chatGPTRepo.post(messageStore.messages).then(
+async function getQuips(utterance) {
+  messageStore.addMessage(utterance, 'user')
+  await nextTick(() => {
+    messageWindow.scrollTop = messageWindow.scrollHeight;
+  })
+  return await chatGPTRepo.generate_repsonse(messageStore.messages).then(
       (result) => {
         const text = result.data.choices[0].message.content
         console.log('chatGPT: ' + text)
@@ -86,22 +87,34 @@ async function getQuips() {
         console.log('json: ')
         const json_parsed = JSON.parse(formatted)
         console.log(json_parsed)
-        messageStore.quips = json_parsed.quips
+        messageStore.response = json_parsed.suggestions
       }
   )
 }
 
-function talk(e) {
+async function talk(e) {
   let message = e.target.innerText
   console.log(messageWindow.scrollHeight)
-  let message_json = `{\n\t"type":  "utterance",\n\t "text":  "${message}"\n}`
-  messageStore.addMessage(message_json, 'assistant')
-  nextTick(() => {
+  messageStore.addMessage(message, 'assistant')
+  await nextTick(() => {
     messageWindow.scrollTop = messageWindow.scrollHeight;
   })
   let utterance = new SpeechSynthesisUtterance(message);
   speechSynthesis.speak(utterance);
   console.log(messageWindow.scrollHeight)
+}
+
+function getMessageContent(message) {
+  try {
+    const body = JSON.parse(message)
+    if (body.text === undefined) {
+      throw new Error();
+    }
+    return body.text
+  } catch (error) {
+    return message
+  }
+
 }
 
 onMounted(
@@ -127,19 +140,20 @@ onMounted(
         <div style="background-color: white">
           <div>
             <div id="messageWindow"
-                 style="box-shadow: inset 0 0 15px #dedcdc; width: 100%; height: 60vh; margin: auto; overflow: scroll">
+                 style="box-shadow: inset 0 0 15px #dedcdc; width: 100%; height: 60vh; margin: auto; overflow: scroll;
+padding: 10px 20px">
               <div v-for="(message, index) in messageStore.messages" :key="index">
                 <div :class="{ message: true,
                   messageOther: message.role === 'user',
                   messageSystem: message.role === 'system',
                   messageSelf: message.role === 'assistant'
                 }">
-                  {{ message.content }}
+                  {{ getMessageContent(message.content) }}
                 </div>
               </div>
             </div>
             <div class="centred-box" style="flex-wrap: wrap; padding: 20px">
-              <button @click="talk" class="quipButton" v-for="(quip, index) in messageStore.quips" :key="index">
+              <button @click="talk" class="quipButton" v-for="(quip, index) in messageStore.response" :key="index">
                 {{ quip }}
               </button>
             </div>
@@ -156,6 +170,19 @@ onMounted(
                     :class="{ recordButtonPressed: isRecording, recordButton: !isRecording }">
               <v-icon icon="mdi:mdi-microphone-outline"/>
             </button>
+          </div>
+          <div class="centred-box" style="margin: 10px">
+            <v-text-field
+                ref="typed_message"
+                v-on:keydown.enter="getQuips(this.$refs.typed_message.modelValue); this.$refs.typed_message.reset()"
+                variant="solo"
+            >
+              <template v-slot:append-inner>
+                <v-icon @click="getQuips(this.$refs.typed_message.modelValue); this.$refs.typed_message.reset()"
+                        id="sendButton">mdi-send
+                </v-icon>
+              </template>
+            </v-text-field>
           </div>
           <div style="height: 100%; padding: 20px; display: flex; flex-wrap: wrap; justify-content:center;">
             <button class="personaIcon">
@@ -200,30 +227,29 @@ onMounted(
 .recordButtonPressed {
   background-color: #2d8655;
   color: white;
-  border: mediumseagreen solid 2px;
+  border: mediumseagreen solid 1px;
   border-radius: 50%;
   height: 100px;
   width: 100px;
+  box-shadow: 0 2px 3px rgba(38, 38, 38, 0.7);;
 }
 
 .recordButton {
   background-color: mediumseagreen;
   color: white;
-  border: mediumseagreen solid 2px;
+  border: mediumseagreen solid 1px;
   border-radius: 50%;
   height: 100px;
   width: 100px;
+  box-shadow: 0 2px 3px rgba(38, 38, 38, 0.7);;
 }
 
 .personaIcon {
-//position: relative; //top: 50%; //transform: translateY(-50%); background-color: blue; padding: 0;
-  color: white;
-  border: #2f57f6 solid 3px;
-  border-radius: 50%;
-  height: 50px;
+//position: relative; //top: 50%; //transform: translateY(-50%); background-color: blue; padding: 0; color: white; border: #2f57f6 solid 3px; border-radius: 50%; background-color: #2f57f6; height: 50px;
   width: 50px;
   margin: 5px;
-  display: inline-block
+  display: inline-block;
+  box-shadow: 0 2px 3px rgba(38, 38, 38, 0.7);
 }
 
 .quipButton {
@@ -231,14 +257,13 @@ onMounted(
   color: white;
   border: mediumseagreen solid 2px;
   border-radius: 20px;
-//height: 40px; min-width: 100px; max-width: 300px;
-  margin: 10px;
-  padding: 5px 10px 5px 10px;
+  box-shadow: 0 2px 3px rgba(38, 38, 38, 0.7);
+//height: 40px; min-width: 100px; max-width: 300px; margin: 10px; padding: 5px 10px 5px 10px;
 }
 
 .message {
   max-width: 70%;
-  padding: 13px;
+  padding: 7px 13px;
   border-radius: 20px;
   margin: 20px;
 }
@@ -246,22 +271,33 @@ onMounted(
 .messageOther {
   background-color: rgba(203, 190, 204, 0.24);
   color: #090909;
-  margin-left: 10px;
+  margin-left: 0px;
   margin-right: auto;
+  width: fit-content;
 }
 
 .messageSystem {
-  background-color: rgba(203, 190, 204, 0.24);
+  background-color: rgba(87, 87, 87, 0.24);
   color: #090909;
   margin-left: auto;
   margin-right: auto;
+  width: fit-content;
 }
 
 .messageSelf {
   background-color: mediumseagreen;
   color: white;
   margin-left: auto;
-  margin-right: 10px;
+  width: fit-content;
+  margin-right: 0px;
+}
+
+#sendButton {
+  color: rgba(59, 59, 59, 0.93);
+}
+
+#sendButton:hover {
+  color: #0da952;
 }
 
 </style>

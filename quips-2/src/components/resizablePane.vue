@@ -80,7 +80,7 @@ function endDragging() {
   }
 
   .right {
-    background-color: #f3f3f3;
+    background-color: rgba(203, 190, 204, 0.24);
     border-left: lightgray 1px solid;
     display: initial;
   }
