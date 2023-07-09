@@ -6,6 +6,7 @@ export const useMessageStore = defineStore('ChatHistory', () => {
     // const count = ref(0)
     const messages = ref([{"role": "system", "content": SystemContext}]);
 
+    const editingMessage = ref('')
 // 2) "context change": This tells you when the situation in which the conversation is taking place changes. This could be you are now talking to a new person, are in a new environment, etc. Example (everything following a # symbol is a comment):
 // {
 //   "type": "context change",
@@ -56,11 +57,15 @@ export const useMessageStore = defineStore('ChatHistory', () => {
         })
     }
 
+    const changeEditMessage = function (message) {
+        editingMessage.value = message
+    }
+
     const response = ref([
         "How about the weather lately?",
         "Do you have any plans for the weekend?",
         "What kind of music do you enjoy listening to?"
     ])
 
-    return {messages, addMessage, response}
+    return {messages, editingMessage, addMessage, changeEditMessage, response}
 })

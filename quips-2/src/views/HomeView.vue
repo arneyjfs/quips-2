@@ -3,6 +3,9 @@ import repositoryFactory from "@/repositories/RepositoryFactory";
 import {useMessageStore} from '@/stores/message'
 import ResizablePane from "@/components/resizablePane.vue";
 import {nextTick, onMounted, ref} from "vue";
+import MessageBubble from "@/components/messageBubble.vue";
+import MessageSuggestionsPanel from "@/components/messageSuggestionsPanel.vue";
+import EditMessagePanel from "@/components/editMessagePanel.vue";
 
 let mediaRecorder;
 const options = {mimeType: 'audio/webm'};
@@ -13,9 +16,8 @@ const messageStore = useMessageStore()
 let player
 let messageWindow
 
-let isRecording = ref(false)
-
-// let typed_message = ''
+const isRecording = ref(false)
+let mode = ref('suggest') // todo: make string literal, suggest, edit, manual
 
 
 function intialiseRecorder(stream) {
@@ -73,10 +75,7 @@ async function getTranscription() {
 }
 
 async function getQuips(utterance) {
-  messageStore.addMessage(utterance, 'user')
-  await nextTick(() => {
-    messageWindow.scrollTop = messageWindow.scrollHeight;
-  })
+  await commitMessage(utterance, 'user')
   return await chatGPTRepo.generate_repsonse(messageStore.messages).then(
       (result) => {
         const text = result.data.choices[0].message.content
@@ -92,29 +91,39 @@ async function getQuips(utterance) {
   )
 }
 
-async function talk(e) {
-  let message = e.target.innerText
-  console.log(messageWindow.scrollHeight)
-  messageStore.addMessage(message, 'assistant')
+async function modifyResponse(response, hint) {
+  mode.value = 'suggest'
+  await chatGPTRepo.modify_repsonse(messageStore.messages, response, hint).then(
+      (result) => {
+        const text = result.data.choices[0].message.content
+        console.log('chatGPT: ' + text)
+        console.log('formatted: ')
+        const formatted = text.replace(/^[^{]*/, '')
+        console.log(formatted)
+        console.log('json: ')
+        const json_parsed = JSON.parse(formatted)
+        console.log(json_parsed)
+        messageStore.response = json_parsed.suggestions
+      }
+  )
+}
+
+async function commitMessage(message, role) {
+  messageStore.addMessage(message, role)
   await nextTick(() => {
     messageWindow.scrollTop = messageWindow.scrollHeight;
   })
+}
+
+async function talk(message) {
+  await commitMessage(message, 'assistant')
   let utterance = new SpeechSynthesisUtterance(message);
   speechSynthesis.speak(utterance);
   console.log(messageWindow.scrollHeight)
 }
 
-function getMessageContent(message) {
-  try {
-    const body = JSON.parse(message)
-    if (body.text === undefined) {
-      throw new Error();
-    }
-    return body.text
-  } catch (error) {
-    return message
-  }
-
+function enterEditMode() {
+  mode.value = 'edit'
 }
 
 onMounted(
@@ -143,20 +152,16 @@ onMounted(
                  style="box-shadow: inset 0 0 15px #dedcdc; width: 100%; height: 60vh; margin: auto; overflow: scroll;
 padding: 10px 20px">
               <div v-for="(message, index) in messageStore.messages" :key="index">
-                <div :class="{ message: true,
-                  messageOther: message.role === 'user',
-                  messageSystem: message.role === 'system',
-                  messageSelf: message.role === 'assistant'
-                }">
-                  {{ getMessageContent(message.content) }}
-                </div>
+                <message-bubble :message="message"/>
               </div>
             </div>
-            <div class="centred-box" style="flex-wrap: wrap; padding: 20px">
-              <button @click="talk" class="quipButton" v-for="(quip, index) in messageStore.response" :key="index">
-                {{ quip }}
-              </button>
+            <div style="padding: 20px">
+              <message-suggestions-panel v-if="mode === 'suggest'" v-on:selected="talk" v-on:edit="enterEditMode"/>
+              <edit-message-panel v-else-if="mode === 'edit'" @close="mode='suggest'" @modify="modifyResponse"/>
+<!--              <message-suggestions-panel v-if="false" v-on:selected="talk" v-on:edit="enterEditMode"/>-->
+<!--              <edit-message-panel v-else-if="true" v-model="editingMessage"/>-->
             </div>
+
           </div>
         </div>
       </template>
@@ -176,6 +181,7 @@ padding: 10px 20px">
                 ref="typed_message"
                 v-on:keydown.enter="getQuips(this.$refs.typed_message.modelValue); this.$refs.typed_message.reset()"
                 variant="solo"
+                hide-details="auto"
             >
               <template v-slot:append-inner>
                 <v-icon @click="getQuips(this.$refs.typed_message.modelValue); this.$refs.typed_message.reset()"
@@ -235,9 +241,9 @@ padding: 10px 20px">
 }
 
 .recordButton {
-  background-color: mediumseagreen;
+  background-color: #43CC47;
   color: white;
-  border: mediumseagreen solid 1px;
+  border: #43CC47 solid 1px;
   border-radius: 50%;
   height: 100px;
   width: 100px;
@@ -245,51 +251,11 @@ padding: 10px 20px">
 }
 
 .personaIcon {
-//position: relative; //top: 50%; //transform: translateY(-50%); background-color: blue; padding: 0; color: white; border: #2f57f6 solid 3px; border-radius: 50%; background-color: #2f57f6; height: 50px;
-  width: 50px;
-  margin: 5px;
+//position: relative; //top: 50%; //transform: translateY(-50%); background-color: blue; padding: 0; color: white; border: #2f57f6 solid 3px; border-radius: 50%; background-color: #2f57f6; height: 50px; width: 50px; margin: 5px;
+  background-color: #1982FC;
+  border: 0;
   display: inline-block;
   box-shadow: 0 2px 3px rgba(38, 38, 38, 0.7);
-}
-
-.quipButton {
-  background-color: mediumseagreen;
-  color: white;
-  border: mediumseagreen solid 2px;
-  border-radius: 20px;
-  box-shadow: 0 2px 3px rgba(38, 38, 38, 0.7);
-//height: 40px; min-width: 100px; max-width: 300px; margin: 10px; padding: 5px 10px 5px 10px;
-}
-
-.message {
-  max-width: 70%;
-  padding: 7px 13px;
-  border-radius: 20px;
-  margin: 20px;
-}
-
-.messageOther {
-  background-color: rgba(203, 190, 204, 0.24);
-  color: #090909;
-  margin-left: 0px;
-  margin-right: auto;
-  width: fit-content;
-}
-
-.messageSystem {
-  background-color: rgba(87, 87, 87, 0.24);
-  color: #090909;
-  margin-left: auto;
-  margin-right: auto;
-  width: fit-content;
-}
-
-.messageSelf {
-  background-color: mediumseagreen;
-  color: white;
-  margin-left: auto;
-  width: fit-content;
-  margin-right: 0px;
 }
 
 #sendButton {
