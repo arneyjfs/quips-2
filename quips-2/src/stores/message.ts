@@ -62,9 +62,9 @@ export const useMessageStore = defineStore('ChatHistory', () => {
     }
 
     const response = ref([
-        "How about the weather lately?",
+        "Anything interesting in the news lately?",
         "Do you have any plans for the weekend?",
-        "What kind of music do you enjoy listening to?"
+        "How was your day?"
     ])
 
     return {messages, editingMessage, addMessage, changeEditMessage, response}

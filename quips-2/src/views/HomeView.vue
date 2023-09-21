@@ -5,7 +5,9 @@ import ResizablePane from "@/components/resizablePane.vue";
 import {nextTick, onMounted, ref} from "vue";
 import MessageBubble from "@/components/messageBubble.vue";
 import MessageSuggestionsPanel from "@/components/messageSuggestionsPanel.vue";
-import EditMessagePanel from "@/components/editMessagePanel.vue";
+import EditIndividualMessage from "@/components/editMessagePanel/editIndividualMessage.vue";
+import EditAllMessages from "@/components/editMessagePanel/editAllMessages.vue";
+import NewConvo from "@/components/newConvo.vue";
 
 let mediaRecorder;
 const options = {mimeType: 'audio/webm'};
@@ -43,8 +45,6 @@ async function toggleRecording() {
   if (isRecording.value) {
     mediaRecorder.stop();
     isRecording.value = false
-
-    // messageStore.addmessage(transcription)
   } else {
     if (!mediaRecorder) {
       let stream;
@@ -76,36 +76,57 @@ async function getTranscription() {
 
 async function getQuips(utterance) {
   await commitMessage(utterance, 'user')
-  return await chatGPTRepo.generate_repsonse(messageStore.messages).then(
-      (result) => {
-        const text = result.data.choices[0].message.content
-        console.log('chatGPT: ' + text)
-        console.log('formatted: ')
-        const formatted = text.replace(/^[^{]*/, '')
-        console.log(formatted)
-        console.log('json: ')
-        const json_parsed = JSON.parse(formatted)
-        console.log(json_parsed)
-        messageStore.response = json_parsed.suggestions
-      }
-  )
+  let result
+  result = await chatGPTRepo.generate_response(messageStore.messages)
+  const text = result.data.choices[0].message.content
+  console.log('chatGPT: ' + text)
+  console.log('formatted: ')
+  const formatted = text.replace(/^[^{]*/, '')
+  console.log(formatted)
+  console.log('json: ')
+  const json_parsed = JSON.parse(formatted)
+  console.log(json_parsed)
+  messageStore.response = json_parsed.suggestions
+}
+
+async function newConversation(hint=null) {
+  mode.value = 'suggest'
+  let result
+  if (hint !== null){
+    result = await chatGPTRepo.generateConversationStartersWithHint(messageStore.messages, hint)
+  }
+  else{
+    result = await chatGPTRepo.generateConversationStarters(messageStore.messages)
+  }
+  const text = result.data.choices[0].message.content
+  console.log('chatGPT: ' + text)
+  console.log('formatted: ')
+  const formatted = text.replace(/^[^{]*/, '')
+  console.log(formatted)
+  console.log('json: ')
+  const json_parsed = JSON.parse(formatted)
+  console.log(json_parsed)
+  messageStore.response = json_parsed.suggestions
 }
 
 async function modifyResponse(response, hint) {
   mode.value = 'suggest'
-  await chatGPTRepo.modify_repsonse(messageStore.messages, response, hint).then(
-      (result) => {
-        const text = result.data.choices[0].message.content
-        console.log('chatGPT: ' + text)
-        console.log('formatted: ')
-        const formatted = text.replace(/^[^{]*/, '')
-        console.log(formatted)
-        console.log('json: ')
-        const json_parsed = JSON.parse(formatted)
-        console.log(json_parsed)
-        messageStore.response = json_parsed.suggestions
-      }
-  )
+  let result
+  if (response === null) {
+    result = await chatGPTRepo.modify_all_responses(messageStore.messages, messageStore.response, hint)
+  }
+  else {
+    result = await chatGPTRepo.modify_response(messageStore.messages, response, hint)
+  }
+  const text = result.data.choices[0].message.content
+  console.log('chatGPT: ' + text)
+  console.log('formatted: ')
+  const formatted = text.replace(/^[^{]*/, '')
+  console.log(formatted)
+  console.log('json: ')
+  const json_parsed = JSON.parse(formatted)
+  console.log(json_parsed)
+  messageStore.response = json_parsed.suggestions
 }
 
 async function commitMessage(message, role) {
@@ -128,6 +149,7 @@ function enterEditMode() {
 
 onMounted(
     () => {
+      newConversation()
       player = document.getElementById('player');
       messageWindow = document.getElementById("messageWindow");
       messageWindow.scrollTop = messageWindow.scrollHeight;
@@ -155,13 +177,20 @@ padding: 10px 20px">
                 <message-bubble :message="message"/>
               </div>
             </div>
-            <div style="padding: 20px">
-              <message-suggestions-panel v-if="mode === 'suggest'" v-on:selected="talk" v-on:edit="enterEditMode"/>
-              <edit-message-panel v-else-if="mode === 'edit'" @close="mode='suggest'" @modify="modifyResponse"/>
-<!--              <message-suggestions-panel v-if="false" v-on:selected="talk" v-on:edit="enterEditMode"/>-->
-<!--              <edit-message-panel v-else-if="true" v-model="editingMessage"/>-->
+            <div style="padding: 15px">
+              <message-suggestions-panel
+                  v-if="mode === 'suggest'"
+                  @selected="talk"
+                  @edit="mode='edit'"
+                  @editAll="mode='editAll'"
+                  @quickEditAll="modifyResponse"
+                  @newConversation="newConversation"
+                  @newConvoMode="mode='newConvo'"
+              />
+              <edit-individual-message v-else-if="mode === 'edit'" @send="talk" @close="mode='suggest'" @modify="modifyResponse"/>
+              <edit-all-messages v-else-if="mode === 'editAll'" @close="mode='suggest'" @modify="modifyResponse"/>
+              <new-convo v-else-if="mode === 'newConvo'" @close="mode='suggest'" @newConvo="newConversation"/>
             </div>
-
           </div>
         </div>
       </template>
@@ -219,9 +248,9 @@ padding: 10px 20px">
               <v-icon icon="mdi:mdi-account-plus-outline"/>
             </button>
           </div>
-          <div style="margin: auto;">
-            <audio id="player" controls/>
-          </div>
+<!--          <div style="margin: auto;">-->
+<!--            <audio id="player" controls/>-->
+<!--          </div>-->
         </div>
       </template>
     </resizable-pane>
@@ -251,8 +280,7 @@ padding: 10px 20px">
 }
 
 .personaIcon {
-//position: relative; //top: 50%; //transform: translateY(-50%); background-color: blue; padding: 0; color: white; border: #2f57f6 solid 3px; border-radius: 50%; background-color: #2f57f6; height: 50px; width: 50px; margin: 5px;
-  background-color: #1982FC;
+//position: relative; //top: 50%; //transform: translateY(-50%); background-color: blue; padding: 0; color: white; border: #2f57f6 solid 3px; border-radius: 50%; background-color: #2f57f6; height: 50px; width: 50px; margin: 5px; background-color: #1982FC;
   border: 0;
   display: inline-block;
   box-shadow: 0 2px 3px rgba(38, 38, 38, 0.7);
